@@ -14,10 +14,12 @@ var downloadFromUrl = function(fileUrl, destinationDir, file_name) {
 	var fileChunks = [];
 	
 	http.get(fileUrl, function(res) {
-		res.on('data', function(data) {			 						
+		res.on('data', function(data) {
 			fileChunks.push(data);
 		}).on('end', function() {
 			var completeFile = fileChunks.join(''); // put together all the chunks in one string
+			
+			// only write 
 			if (!completeFile.toString().startsWith('<script type="text/javascript">')) {
 				var file = fs.createWriteStream(DOWNLOAD_DIR + file_name);
 				file.write(completeFile);
@@ -39,7 +41,7 @@ app.get('/', function(req, res) {
 	var majorNames = fs.readFileSync(filename, 'utf8').split(";");
 	console.log('Faecher: ' + majorNames);
 
-	var courses = ["a", "b", "c"];	// courses in a given major, e.g. WI13a, WI13b etc.
+	var courses = ["a", "b", "c", ""];	// courses in a given major, e.g. WI13a, WI13b etc.
 	var numberOfSemesters = 6;	// how many semester are to be crawled per major and majors
 	var icsMoodleUrlBase = 'http://moodle.hwr-berlin.de/fb2-stundenplan/download.php?doctype=.ics&url=./fb2-stundenplaene/';
 			
