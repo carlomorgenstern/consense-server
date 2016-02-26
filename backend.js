@@ -3,9 +3,41 @@ var app = express(); 					// instantiate webserver
 var http = require('http');
 var port = 8080;
 
-var webdata;								// TODO Hält Inhalt der ICS-Files
+// Dependencies for downloadFromUrl
+var fs = require('fs');
+var url = require('url');
+var http = require('http');
+var exec = require('child_process').exec;
+var spawn = require('child_process').spawn;
+
+// download something from a given url and save it on disk
+var downloadFromUrl = function(url, destinationDir) {
+	var DOWNLOAD_DIR = destinationDir;
+
+	// Function to download file using HTTP.get
+	var download_file_httpget = function(url) {
+	var options = {
+		host: url.parse(url).host,
+		port: 80,
+		path: url.parse(url).pathname
+	};
+
+	var file_name = url.parse(url).pathname.split('/').pop();
+	var file = fs.createWriteStream(DOWNLOAD_DIR + file_name);
+
+	http.get(options, function(res) {
+		res.on('data', function(data) {
+				file.write(data);
+			}).on('end', function() {
+				file.end();
+				console.log(file_name + ' downloaded to ' + DOWNLOAD_DIR);
+			});
+		});
+	};
+};
 
 
+// Define what happens if someone requests something from the server
 app.get('/', function(req, res) {
 	// res.send("Lese die Studiengänge ein (vgl. Console)"); // DEBUG
 
@@ -14,13 +46,9 @@ app.get('/', function(req, res) {
 	var fs = require('fs'); 				// filesystem
   	var filename = './courseData/majors.txt';
 	
-	fs.readFile(filename, 'utf8', function(err, data) {
-	  	if (err) throw err;
-	  	majorNames = data.toString().split(";");
-		console.log('Faecher: ' + majorNames); // DEBUG
-	});
-		
-	
+	var majorNames = fs.readFileSync(filename, 'utf8').split(";");
+	console.log('Faecher: ' + majorNames);
+
 	var courses = ["a", "b", "c"];	// courses in a given major, e.g. WI13a, WI13b etc.
 	var numberOfSemesters = 6;	// how many semester are to be crawled per major and majors
 	var icsMoodleUrlBase = 'http://moodle.hwr-berlin.de/fb2-stundenplan/download.php?doctype=.ics&url=./fb2-stundenplaene/';
@@ -36,44 +64,13 @@ app.get('/', function(req, res) {
 	}
 	
 	console.log("URLS: " + icsUrls); // DEBUG	
-	console.log(''); // DEBUG
+	console.log(''); // DEBUG	
 	
-	
-	
-	// Function to download file using wget
-	var download_file_wget = function(file_url) {
-		
-		var DOWNLOAD_DIR = './courseData/'
-		
-		var file_name = url.parse(file_url).pathname.split('/').pop(); // extract the file name
-		var wget = 'wget -P ' + DOWNLOAD_DIR + ' ' + file_url; // compose the wget command
-		
-		// excute wget using child_process' exec function
-		var child = exec(wget, function(err, stdout, stderr) {
-			if (err) throw err;
-			else console.log(file_name + ' downloaded to ' + DOWNLOAD_DIR);
-		});
-	};
-	
-	// download_file_wget(icsUrls[87]);
-	// download_file_wget('http://philippkoch.com/img/index/ph_bruecke.jpg');
-	
+	// downloadFromUrl('http://www.hacksparrow.com/using-node-js-to-download-files.html', './courseData/');
+	downloadFromUrl(icsUrls[87], './courseData/');	
 });
 
-
+//  Start the server
 app.listen(port, function(){
 	console.log('Server erzeugt. Erreichbar unter http://localhost:%d', port);
 });
-
-
-/*	
-	http.get("http://www.philippkoch.com", function(response) {
-		console.log(response.statusCode);
-		webdata = null;
-		response.on('data', function(chunk) {
-			console.log('Body:' + chunk);
-			webdata += chunk;
-		})
-
-	});
-*/
