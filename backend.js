@@ -7,22 +7,19 @@ var port = 8080;
 var fs = require('fs');
 var url = require('url');
 var http = require('http');
-var exec = require('child_process').exec;
-var spawn = require('child_process').spawn;
 
 // download something from a given url and save it on disk
-var downloadFromUrl = function(url, destinationDir) {
+var downloadFromUrl = function(fileUrl, destinationDir) {
 	var DOWNLOAD_DIR = destinationDir;
 
-	// Function to download file using HTTP.get
-	var download_file_httpget = function(url) {
+	// Function to download file using HTTP.get	
 	var options = {
-		host: url.parse(url).host,
+		host: url.parse(fileUrl).host,
 		port: 80,
-		path: url.parse(url).pathname
+		path: url.parse(fileUrl).pathname
 	};
 
-	var file_name = url.parse(url).pathname.split('/').pop();
+	var file_name = url.parse(fileUrl).pathname.split('/').pop();
 	var file = fs.createWriteStream(DOWNLOAD_DIR + file_name);
 
 	http.get(options, function(res) {
@@ -32,8 +29,7 @@ var downloadFromUrl = function(url, destinationDir) {
 				file.end();
 				console.log(file_name + ' downloaded to ' + DOWNLOAD_DIR);
 			});
-		});
-	};
+		});	
 };
 
 
