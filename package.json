@@ -1,0 +1,26 @@
+{
+  "name": "consense-server",
+  "version": "1.0.0",
+  "description": "Backend",
+  "main": "machMaServer.js",
+  "dependencies": {
+    "express": "^4.13.4",
+    "ical.js": "^1.1.2",
+    "nodemailer": "^2.2.1",
+    "oauth-1.0a": "^1.0.1"
+  },
+  "devDependencies": {},
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/carlomorgenstern/consense-server.git"
+  },
+  "author": "Ph",
+  "license": "LGPL-3.0",
+  "bugs": {
+    "url": "https://github.com/carlomorgenstern/consense-server/issues"
+  },
+  "homepage": "https://github.com/carlomorgenstern/consense-server#readme"
+}
