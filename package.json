@@ -8,6 +8,7 @@
     "ical.js": "^1.1.2",
     "nodemailer": "^2.2.1",
     "oauth-1.0a": "^1.0.1",
+    "q": "^1.4.1",
     "url": "^0.11.0"
   },
   "devDependencies": {
