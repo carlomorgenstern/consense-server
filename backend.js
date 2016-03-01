@@ -4,6 +4,7 @@ var http = require('http');
 var port = 8080;
 var ical = require('ical.js');			// instantiate ICAL parser
 var Q = require('q');					// provide promises to the script execution
+var stripBom = require('strip-bom');
 
 // Dependencies for downloadFromUrl
 var fs = require('fs');
@@ -40,13 +41,9 @@ var downloadFromUrl = function(fileUrl, destinationDir, file_name) {
 
 // ** parse a given ICS file into the database
 var parseIcsIntoDatabase = function(filePath) {
-	console.log('Reading ICS-file: ' + filePath + ".");
-	var fs = require('fs'); 	// filesystem
-	var fileContent = fs.readFileSync(filePath, 'utf8');
-	
-	console.log('Parsing ICS-file into memory.');
-	var icalData = ical.parse(fileContent);
-console.log("[icalData:]" + icalData); // <------------------- !!
+	console.log('Reading ICS-file:' + filePath + ".");
+	var fileContent = stripBom(fs.readFileSync(filePath, 'utf8'));
+	var icalData = ICAL.parse(fileContent);
 	
 	var comp = new ICAL.Component(icalData);				// instantiate ical component
 	var vevent = comp.getFirstSubcomponent("vevent");	// get the component's first appointment
