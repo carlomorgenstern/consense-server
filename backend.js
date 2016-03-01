@@ -31,7 +31,7 @@ var downloadFromUrl = function(fileUrl, destinationDir, file_name) {
 // Define what happens if someone requests something from the server
 app.get('/', function(req, res) {
 	// res.send("Lese die Studiengänge ein (vgl. Console)"); // DEBUG
-
+	console.log("TEST");
 	// Fill array with courses (Studiengänge) from text file
 	var majorNames = [] // holds majors whose schedules are to be fetched
 	var fs = require('fs'); // filesystem
@@ -52,7 +52,8 @@ app.get('/', function(req, res) {
 			}
 		}
 	}
-
+	console.log("finished init");
+	res.end();
 });
 
 //  Start the server
