@@ -1,96 +1,94 @@
-var express = require('express'); 	// node.js: declare webserver
-var app = express(); 					// instantiate webserver
-var http = require('http');
-var port = 8080;
-var ical = require('ical.js');			// instantiate ICAL parser
-var Q = require('q');					// provide promises to the script execution
-var stripBom = require('strip-bom');
+// Imports - every imported library starts with a capital letter
+var Express = require("express")(); // import webserver
 
-// Dependencies for downloadFromUrl
-var fs = require('fs');
-var url = require('url');
-var http = require('http');
+var Path = require("path"); // import internal path validator
+var Urljoin = require("url-join"); // import sane url joiner
 
-// ** download something from a given url and save it on disk
-var downloadFromUrl = function(fileUrl, destinationDir, file_name) {
-	var fileChunks = [];
-	var deferred = Q.defer(); // object to handle promise
-	
-	http.get(fileUrl, function(res) {
-		res.on('data', function(data) {
-			fileChunks.push(data);
-		}).on('end', function() {
-			var completeFile = fileChunks.join(''); // put together all the chunks in one string
+var Q = require("q"); // import promises functionality
+var Qfs = require("q-io/fs"); // import fs with promises
+var Qhttp = require("q-io/http"); // import http with promises
 
-			// only write if ics-file actually holds appointment data
-			if (!completeFile.toString().startsWith('<script type="text/javascript">')) {
-				var file = fs.createWriteStream(destinationDir + file_name);
-				file.write(completeFile, "utf8", function(){
-					console.log('Successfully downloaded ' + destinationDir + file_name + ".");
-					deferred.resolve(destinationDir + file_name); // announce that download has been successful
-				});
-			} else {
-				deferred.reject(); // download not successful
-			}		
-		});
-	});
-	
-	return deferred.promise;
+var StripBom = require("strip-bom"); // import bom-stripper needed for ical.js
+var Ical = require("ical.js"); // import ical parser
+
+// constants
+const data = {
+	serverport: 8080,
+	dataSource: {
+		icsMoodleUrlBase: "http://moodle.hwr-berlin.de/fb2-stundenplan/download.php?doctype=.ics&url=./fb2-stundenplaene/",
+		preSemesterString: "semester",
+		preCourseString: "kurs",
+		majors: ["wi", "bank", "tourismus", "iba", "ppm"], // holds majors whose schedules are to be fetched
+		semesters: 6, // how many semester are to be crawled per major and majors
+		courses: ["a", "b", "c", ""] // courses in a given major, e.g. WI13a, WI13b etc.
+	},
+	destinationDir: "courseData"
 };
 
+// ** download a file from a given URL and save it on disk
+var downloadFromUrl = function(fileUrl, destinationDir, fileName) {
+	return Qhttp.request(fileUrl)
+		.then(function(htmlResponse) {
+			return htmlResponse.body.read();
+		})
+		.then(function(content) {
+			content = StripBom(content.toString()); //Stripping BOM from file, so Ical.js can parse correctly later
+			if (!content.startsWith("<script type")) {
+				var filePath = Path.join(destinationDir, fileName);
+				return Qfs.write(filePath, content).then(function() {
+					return Q.resolve(filePath);
+				}, function() {
+					return Q.reject("Could not write file.");
+				});
+			} else {
+				return Q.reject("Found response is not an ICS-File.");
+			}
+		});
+};
 
 // ** parse a given ICS file into the database
 var parseIcsIntoDatabase = function(filePath) {
-	console.log('Reading ICS-file:' + filePath + ".");
-	var fileContent = stripBom(fs.readFileSync(filePath, 'utf8'));
-	var icalData = ICAL.parse(fileContent);
-	
-	var comp = new ICAL.Component(icalData);				// instantiate ical component
-	var vevent = comp.getFirstSubcomponent("vevent");	// get the component's first appointment
-	var event = new ICAL.Event(vevent);						// instantiate the event
-	var summary = event.summary;								// get the event's summary
-	var description = event.description;							// get the event's description
-	var location = event.location;									// get the event's location
-	
-	console.log('------------');
-	console.log('SUMMARY:' + summary);
-	console.log('DESCRIPTION:' + description);
-	console.log('LOCATION:' + location);	
-	console.log('------------');
+	console.log("Reading ICS-file:" + filePath + ".");
+
+	Qfs.read(filePath)
+		.then(function(fileContent) {
+			var icalComp = Ical.Component(Ical.parse(fileContent)); // parse ical and instantiate ical component
+			var vevent = icalComp.getFirstSubcomponent("vevent"); // get the component"s first appointment
+			var event = new Ical.Event(vevent); // instantiate the event
+			var summary = event.summary; // get the event"s summary
+			var description = event.description; // get the event"s description
+			var location = event.location; // get the event"s location
+
+			console.log("------------");
+			console.log("SUMMARY:" + summary);
+			console.log("DESCRIPTION:" + description);
+			console.log("LOCATION:" + location);
+			console.log("------------");
+		});
 };
 
-
-// Define what happens if someone requests something from the server
-app.get('/', function(req, res) {
+// Define what happens if someone requests anything from the server
+Express.get("/", function(request, response) {
 	// Fill array with courses (Studiengänge) from text file
-	var majorNames = [] 	// holds majors whose schedules are to be fetched
-	var fs = require('fs'); 	// filesystem
-	var filename = './majors.txt';
+	console.log("Start processing course data");
 
-	var majorNames = fs.readFileSync(filename, 'utf8').split(";");
-	console.log('Start downloading course data:');
-
-	var courses = ["a", "b", "c", ""]; 	// courses in a given major, e.g. WI13a, WI13b etc.
-	var numberOfSemesters = 6; 		// how many semester are to be crawled per major and majors
-	var icsMoodleUrlBase = 'http://moodle.hwr-berlin.de/fb2-stundenplan/download.php?doctype=.ics&url=./fb2-stundenplaene/';
-
-	for (i in majorNames) {
-		for (var sem = 1; sem < numberOfSemesters + 1; sem++) {
-			for (j in courses) {
+	for (var major of data.dataSource.majors) {
+		for (var semester = 1; semester <= data.dataSource.semesters; semester++) {
+			for (var course of data.dataSource.courses) {
 				// Download ICS files: Pattern = {baseURL}+{major}+"/semester"+{integer}+"/kurs"+{courseLetter}
-				console.log('Trying to download: ' + majorNames[i] + ", semester #" + sem + ", course " + courses[j] + ".");
-				var promise = downloadFromUrl(icsMoodleUrlBase + majorNames[i] + '/semester' + sem + '/kurs' + courses[j], "./courseData/", majorNames[i] + sem + courses[j] + ".ics");
-				promise.then(function (filePath) {
-					parseIcsIntoDatabase(filePath)} // if download has been sucessfully finished, parse the contents
-				);	
+				var downloadUrl = Urljoin(data.dataSource.icsMoodleUrlBase, major, data.dataSource.preSemesterString + semester, data.dataSource.preCourseString + course);
+				console.log("Trying to download: " + downloadUrl);
+				downloadFromUrl(downloadUrl, data.destinationDir, major + semester + course + ".ics")
+					.then(parseIcsIntoDatabase);
 			}
 		}
 	}
-	
-	res.end();
+
+	console.log("Finished processing course data");
+	response.end();
 });
 
 //  Start the server
-app.listen(port, function() {
-	console.log('Server erzeugt. Erreichbar unter http://localhost:%d', port);
+Express.listen(data.serverport, function() {
+	console.log("Server erzeugt. Erreichbar unter http://localhost:%d", data.serverport);
 });
