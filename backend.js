@@ -1,171 +1,82 @@
 // Imports - every imported library starts with a capital letter
-var Express = require('express')(); // import webserver
-
-var Urljoin = require('url-join'); // import sane url joiner
-
-var Q = require('q'); // import promises functionality
-var Qhttp = require('q-io/http'); // import http with promises
-
-var StripBom = require('strip-bom'); // import bom-stripper needed for ical.js
-var Ical = require('ical.js'); // import ical parser
-
-var Mysql = require('mysql'); //import mysql handler
+const Express = require('express')(); // import and create webserver
+const Q = require('q'); // import promises functionality
+const Mysql = require('mysql'); // import mysql handler
+const ChildProcess = require('child_process'); // import child process
 
 // constants
 const data = {
 	serverport: 8080,
-	dataSource: {
-		icsMoodleUrlBase: 'http://moodle.hwr-berlin.de/fb2-stundenplan/download.php?doctype=.ics&url=./fb2-stundenplaene/',
-		preSemesterString: 'semester',
-		preCourseString: 'kurs',
-		majors: ['wi', 'bank', 'tourismus', 'iba', 'ppm'], // holds majors whose schedules are to be fetched
-		semesters: 6, // how many semester are to be crawled per major and majors
-		courses: ['a', 'b', 'c', ''] // courses in a given major, e.g. WI13a, WI13b etc.
+	pathToUpdaterModule: 'updater.js',
+	timeTillRefresh: 1000, //ms
+	mysql: {
+		host: 'omegainc.de',
+		user: 'consense',
+		password: 'Faustmann',
+		database: 'consense'
 	}
 };
 
-// create a connection pool for the mysql database
-var mysqlpool = Mysql.createPool({
-	host: 'omegainc.de',
-	user: 'consense',
-	password: 'Faustmann',
-	database: 'consense'
-});
+// connection pool for the mysql database
+var mysqlpool = Mysql.createPool(data.mysql);
 
-// ** download a file from a given URL and return a promise resolved with the icsdata
-var downloadFromUrl = function(fileUrl) {
-	return Qhttp.request(fileUrl)
-		.then(function(htmlResponse) {
-			return htmlResponse.body.read();
-		})
-		.then(function(fileContent) {
-			fileContent = StripBom(fileContent.toString()); // strip BOM from file, so startWith works and Ical.js can parse correctly later
-			if (!fileContent.startsWith('<script type')) {
-				return Q.resolve(fileContent);
-			} else {
-				return Q.reject('Found response is not an ICS-File.');
-			}
-		});
-};
+// function to updata the data from data source
+var updateData = (function() {
+	// timestamp for the last data refresh
+	var lastRefreshTimestamp = Date.now();
+	// reference to child process
+	var updaterProcess = null;
 
-// ** parse a given ICS file into the database
-var parseIcsIntoDatabase = function(fileContent) {
-
-	var icalComp = new Ical.Component(Ical.parse(fileContent)); // parse ical and instantiate ical component
-	var vevents = icalComp.getAllSubcomponents('vevent'); // get all vevents from the ical
-	var parsedEvents = []; // holding parsed values to batch insert into database
-	for (var i = 0; i < vevents.length; i++) {
-		var event = new Ical.Event(vevents[i]);
-
-		// extract and parse the needed properties: UID, Location, Description, DTSTART, DTEND
-		// UID parsing
-		var uid = undefined,
-			startDate = undefined,
-			endDate = undefined,
-			location = undefined,
-			type = undefined,
-			eventName = undefined,
-			eventGroup = undefined,
-			comment = undefined,
-			speaker = undefined;
-		if (event.uid !== null && isNaN(event.uid.replace('sked.de'))) {
-			uid = event.uid.replace('sked.de', '');
-			if (isNaN(uid)) {
-				console.log('event.uid is not a number after parsing - skipping event: ' + uid);
-				continue;
-			}
+	// definition of function 'updateData'
+	return function(instantRefresh) {
+		if (updaterProcess !== null) {
+			return Q.reject('Refresh is already running');
+		} else if (instantRefresh && lastRefreshTimestamp + data.timeTillRefresh >= Date.now()) {
+			return Q.reject('Refresh was already requested at ' + lastRefreshTimestamp);
 		} else {
-			console.log('event.uid not present - skipping event');
-			continue;
-		}
+			var deferred = Q.defer();
 
-		// Start date parsing and converting to MYSQL DateTime
-		if (event.startDate !== null) {
-			startDate = event.startDate.toJSDate().toISOString().slice(0, 19).replace('T', ' ');
-		} else {
-			console.log('event.startDate not present - skipping event ' + uid);
-			continue;
-		}
+			updaterProcess = ChildProcess.fork(data.pathToUpdaterModule);
+			updaterProcess.send(data.mysql);
 
-		// Start date parsing and converting to MYSQL DateTime
-		if (event.endDate !== null) {
-			endDate = event.endDate.toJSDate().toISOString().slice(0, 19).replace('T', ' ');
-		} else {
-			console.log('event.endDate not present - skipping event ' + uid);
-			continue;
-		}
-
-		// Location parsing
-		if (event.location !== null) {
-			location = event.location;
-		} else {
-			console.log('event.location not present - skipping event ' + uid);
-			continue;
-		}
-
-		// Description parsing
-		if (event.description !== null) {
-			var descriptionElements = event.description.split('\n');
-			for (var element of descriptionElements) {
-				var value = element.substring(element.indexOf(':') + 1).trim();
-				if (value == '-') {
-					value = '';
-				} 
-				if (element.startsWith('Art:')) {
-					type = value;
-				} else if (element.startsWith('Veranstaltung:')) {
-					eventName = value;
-				} else if (element.startsWith('Veranstaltungsuntergruppe:')) {
-					eventGroup = value;
-				} else if (element.startsWith('Anmerkung:')) {
-					comment = value;
-				} else if (element.startsWith('Dozent:')) {
-					speaker = value;
+			updaterProcess.on('message', (message) => {
+				if (message === 'data_refreshed') {
+					updaterProcess = null;
+					deferred.resolve('Data was updated');
 				}
-			}
-			if (type === undefined || eventName === undefined || eventGroup === undefined || comment === undefined || speaker === undefined) {
-				console.log('could not parse all fields from event.description - skipping event ' + uid);
-				console.log(event.toString());
-			}
-		} else {
-			console.log('event.description not present - skipping event ' + uid);
-			continue;
+			});
+			return deferred.promise;
 		}
-
-		parsedEvents.push([uid, startDate, endDate, location, type, eventName, eventGroup, comment, speaker]);
-	}
-	var sqlcommand = 'INSERT INTO Events (UID, StartDate, EndDate, Location, Type, EventName, EventGroup, Comment, Speaker) ' +
-		'VALUES ? ON DUPLICATE KEY UPDATE StartDate=VALUES(StartDate), EndDate=VALUES(EndDate), Location=VALUES(Location), Type=VALUES(Type), EventName=VALUES(EventName), EventGroup=VALUES(EventGroup), Comment=VALUES(Comment), Speaker=VALUES(Speaker);';
-	mysqlpool.query(sqlcommand, [parsedEvents], function(err, rows) {
-		if (err) {
-			console.log(err);
-		}
-		console.log(rows);
-	});
-};
+	};
+}());
 
 // Define what happens if someone requests anything from the server
-Express.get('/', function(request, response) {
-	// Fill array with courses (Studiengänge) from text file
-	console.log('Start processing course data');
-
-	for (var major of data.dataSource.majors) {
-		for (var semester = 1; semester <= data.dataSource.semesters; semester++) {
-			for (var course of data.dataSource.courses) {
-				// Download ICS files: Pattern = {baseURL}+{major}+'/semester'+{integer}+'/kurs'+{courseLetter}
-				var downloadUrl = Urljoin(data.dataSource.icsMoodleUrlBase, major, data.dataSource.preSemesterString + semester, data.dataSource.preCourseString + course);
-				console.log('Trying to download: ' + downloadUrl);
-				downloadFromUrl(downloadUrl)
-					.then(parseIcsIntoDatabase);
-			}
+Express.get('/api/rooms', (request, response) => {
+	mysqlpool.query('SELECT DISTINCT Location FROM Events', function(error, results, fields) {
+		if (error) {
+			console.log(error);
 		}
-	}
-
-	console.log('Finished processing course data');
+		console.log(results);
+		console.log(fields);
+	})
 	response.end();
 });
 
+// API request for refreshing data from the data source manually, which is limited by data.timeTillRefresh
+Express.get('/api/refresh', (request, response) => {
+	updateData().then(function() {
+		response.status(204).end();
+	}, function(error) {
+		response.status(423).json({
+			error: error
+		});
+	});
+});
+
 //  Start the server
-Express.listen(data.serverport, function() {
+Express.listen(data.serverport, () => {
 	console.log('Server erzeugt. Erreichbar unter http://localhost:%d', data.serverport);
 });
+
+// Refresh data when starting the server
+updateData();
