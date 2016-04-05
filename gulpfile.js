@@ -3,7 +3,8 @@ var server = require('gulp-develop-server');
 var browserSync = require('browser-sync');
 
 var serverFiles = [
-	'./backend.js'
+	'./backend.js',
+	'./updater.js'
 ];
 
 var options = {
