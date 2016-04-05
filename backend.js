@@ -58,7 +58,7 @@ Express.get('/api/rooms', (request, response) => {
 		}
 		console.log(results);
 		console.log(fields);
-	})
+	});
 	response.end();
 });
 

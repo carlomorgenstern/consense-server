@@ -135,6 +135,10 @@ var parseIcsIntoDatabase = function(fileContent) {
 	return deferred.promise;
 };
 
+var logError = function(error) {
+	console.log("error: " + error);
+};
+
 process.on('message', (message) => {
 	if (message.host !== undefined && message.user !== undefined) {
 		var promises = [];
@@ -144,9 +148,7 @@ process.on('message', (message) => {
 				for (var course of dataSource.courses) {
 					// Download ICS files: Pattern = {baseURL}+{major}+'/semester'+{integer}+'/kurs'+{courseLetter}
 					var downloadUrl = Urljoin(dataSource.icsMoodleUrlBase, major, dataSource.preSemesterString + semester, dataSource.preCourseString + course);
-					var promise = downloadFromUrl(downloadUrl).then(parseIcsIntoDatabase, (err) => {
-						console.log("error: " + err);
-					});
+					var promise = downloadFromUrl(downloadUrl).then(parseIcsIntoDatabase, logError);
 					promises.push(promise);
 				}
 			}
