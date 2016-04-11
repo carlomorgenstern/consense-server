@@ -129,7 +129,7 @@ var parseIcsIntoDatabase = function(fileContent) {
 		if (error) {
 			deferred.reject(error);
 		}
-		console.log(rows);
+		//console.log(rows);
 		deferred.resolve('database update successfull');
 	});
 	return deferred.promise;

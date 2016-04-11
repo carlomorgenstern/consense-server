@@ -61,7 +61,7 @@ var apiFunctions = (function() {
 	};
 
 	// an object that holds all functions that interact with the database
-	// all functions return a promise which resolves with a JSON result or reject with an error code
+	// all functions return a promise which resolves with a JSON result or rejects with an error code
 	return {
 		getRoomChoices: function() {
 			if (cache.rooms !== null) {
@@ -103,6 +103,30 @@ var apiFunctions = (function() {
 				return deferred.promise;
 			}
 		},
+		getEventsForRoom: function(roomName) {
+			var deferred = Q.defer();
+			mysqlpool.query('SELECT * FROM Events WHERE Location = ?', [roomName], function(error, results) {
+				if (error) {
+					deferred.reject(error);
+					return;
+				}
+
+				deferred.resolve(JSON.stringify(results));
+			});
+			return deferred.promise;
+		},
+		getEventsForSpeaker: function(speakerName) {
+			var deferred = Q.defer();
+			mysqlpool.query('SELECT * FROM Events WHERE Speaker = ?', [speakerName], function(error, results) {
+				if (error) {
+					deferred.reject(error);
+					return;
+				}
+
+				deferred.resolve(JSON.stringify(results));
+			});
+			return deferred.promise;
+		},
 		rebuildCache: function() {
 			cache.rooms = null;
 			cache.speakers = null;
@@ -124,6 +148,7 @@ var apiFunctions = (function() {
 
 // API request for getting all possible rooms
 Express.get('/api/rooms', (request, response) => {
+	response.set("Access-Control-Allow-Origin", "*");
 	apiFunctions.getRoomChoices().then(function(roomJSON) {
 		response.json(roomJSON);
 	}, function(error) {
@@ -134,6 +159,7 @@ Express.get('/api/rooms', (request, response) => {
 
 // API request for getting all possible speakers
 Express.get('/api/speakers', (request, response) => {
+	response.set("Access-Control-Allow-Origin", "*");
 	apiFunctions.getSpeakerChoices().then(function(speakerJSON) {
 		response.json(speakerJSON);
 	}, function(error) {
@@ -144,6 +170,7 @@ Express.get('/api/speakers', (request, response) => {
 
 // API request for refreshing data from the data source manually, which is limited by data.timeTillRefresh
 Express.get('/api/refresh', (request, response) => {
+	response.set("Access-Control-Allow-Origin", "*");
 	updateData().then(function() {
 		apiFunctions.rebuildCache();
 		response.status(204).end();
