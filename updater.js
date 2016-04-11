@@ -14,7 +14,7 @@ const dataSource = {
 	icsMoodleUrlBase: 'http://moodle.hwr-berlin.de/fb2-stundenplan/download.php?doctype=.ics&url=./fb2-stundenplaene/',
 	preSemesterString: 'semester',
 	preCourseString: 'kurs',
-	majors: ['wi', 'bank', 'tourismus', 'iba', 'ppm'], // holds majors whose schedules are to be fetched
+	majors: ['bank', 'bauwesen', 'dl', 'elektrotechnik', 'fm', 'handel', 'iba', 'immobilien', 'industrie', 'informatik', 'maschinenbau', 'ppm', 'spedition', 'tourismus', 'versicherung', 'wi'], // holds majors whose schedules are to be fetched
 	semesters: 6, // how many semester are to be crawled per major and majors
 	courses: ['a', 'b', 'c', ''] // courses in a given major, e.g. WI13a, WI13b etc.
 };
