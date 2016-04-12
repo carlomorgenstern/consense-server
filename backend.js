@@ -157,10 +157,30 @@ Express.get('/api/rooms', (request, response) => {
 	});
 });
 
+Express.get('/api/room/:base64Room', (request, response) => {
+	response.set("Access-Control-Allow-Origin", "*");
+	apiFunctions.getEventsForRoom(new Buffer(request.params.base64Room.toString(), 'base64').toString('utf8')).then(function(roomJSON) {
+		response.json(roomJSON);
+	}, function(error) {
+		console.log(error);
+		response.status(500).end();
+	});
+});
+
 // API request for getting all possible speakers
 Express.get('/api/speakers', (request, response) => {
 	response.set("Access-Control-Allow-Origin", "*");
 	apiFunctions.getSpeakerChoices().then(function(speakerJSON) {
+		response.json(speakerJSON);
+	}, function(error) {
+		console.log(error);
+		response.status(500).end();
+	});
+});
+
+Express.get('/api/speaker/:base64Speaker', (request, response) => {
+	response.set("Access-Control-Allow-Origin", "*");
+	apiFunctions.getEventsForSpeaker(new Buffer(request.params.base64Speaker, 'base64').toString('utf8')).then(function(speakerJSON) {
 		response.json(speakerJSON);
 	}, function(error) {
 		console.log(error);
@@ -187,4 +207,4 @@ Express.listen(data.serverport, () => {
 });
 
 // Refresh data when starting the server
-updateData().then(apiFunctions.rebuildCache);
+// updateData().then(apiFunctions.rebuildCache);
