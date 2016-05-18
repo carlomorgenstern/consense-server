@@ -1,5 +1,6 @@
 // This is the script responsible for updating all events from the data source
 // It is started as a seperate process by the backend when needed, so the computational work does not block the api service
+'use strict';
 
 // Imports
 const Urljoin = require('url-join'); // import sane url joiner
@@ -22,8 +23,30 @@ const dataSource = {
 // holder for mysqlpool
 var mysqlpool;
 
-// ** download a file from a given URL and return a promise resolved with the icsdata
-var downloadFromUrl = function(fileUrl) {
+// kicks of the updating process after receiving a message
+process.on('message', (message) => {
+	if (message.host !== undefined && message.user !== undefined) {
+		let promises = [];
+		mysqlpool = Mysql.createPool(message);
+		for (let major of dataSource.majors) {
+			for (let semester = 1; semester <= dataSource.semesters; semester++) {
+				for (let course of dataSource.courses) {
+					// Download ICS files: Pattern = {baseURL}+{major}+'/semester'+{integer}+'/kurs'+{courseLetter}
+					let downloadUrl = Urljoin(dataSource.icsMoodleUrlBase, major, dataSource.preSemesterString + semester, dataSource.preCourseString + course);
+					let promise = downloadFromUrl(downloadUrl).then(parseIcsIntoDatabase, logError);
+					promises.push(promise);
+				}
+			}
+		}
+		Q.all(promises).done(function() {
+			process.send('data_refreshed');
+			process.exit(0);
+		});
+	}
+});
+
+// download a file from a given URL and return a promise resolved with the icsdata
+function downloadFromUrl(fileUrl) {
 	return Qhttp.request(fileUrl)
 		.then(function(htmlResponse) {
 			return htmlResponse.body.read();
@@ -36,28 +59,19 @@ var downloadFromUrl = function(fileUrl) {
 				return Q.reject('Found response is not an ICS-File.');
 			}
 		});
-};
+}
 
-// ** parse a given ICS file into the database
-var parseIcsIntoDatabase = function(fileContent) {
-	var deferred = Q.defer();
-	var icalComp = new Ical.Component(Ical.parse(fileContent)); // parse ical and instantiate ical component
-	var vevents = icalComp.getAllSubcomponents('vevent'); // get all vevents from the ical
-	var parsedEvents = []; // holding parsed values to batch insert into database
-	for (var i = 0; i < vevents.length; i++) {
-		var event = new Ical.Event(vevents[i]);
+// parse a given ICS file into the database
+function parseIcsIntoDatabase(fileContent) {
+	let deferred = Q.defer();
+	let vevents = (new Ical.Component(Ical.parse(fileContent))).getAllSubcomponents('vevent'); // parse ical and get all vevents from the ical
+	let parsedEvents = []; // holding parsed values to batch insert into database
+	for (let i = 0; i < vevents.length; i++) {
+		let event = new Ical.Event(vevents[i]);
 
 		// extract and parse the needed properties: UID, Location, Description, DTSTART, DTEND
 		// UID parsing
-		var uid = undefined,
-			startDate = undefined,
-			endDate = undefined,
-			location = undefined,
-			type = undefined,
-			eventName = undefined,
-			eventGroup = undefined,
-			comment = undefined,
-			speaker = undefined;
+		let uid, startDate, endDate, location, type, eventName, eventGroup, comment, speaker;
 		if (event.uid !== null && isNaN(event.uid.replace('sked.de'))) {
 			uid = event.uid.replace('sked.de', '');
 			if (isNaN(uid)) {
@@ -95,9 +109,9 @@ var parseIcsIntoDatabase = function(fileContent) {
 
 		// Description parsing
 		if (event.description !== null) {
-			var descriptionElements = event.description.split('\n');
-			for (var element of descriptionElements) {
-				var value = element.substring(element.indexOf(':') + 1).trim();
+			let descriptionElements = event.description.split('\n');
+			for (let element of descriptionElements) {
+				let value = element.substring(element.indexOf(':') + 1).trim();
 				if (value == '-') {
 					value = '';
 				}
@@ -123,39 +137,18 @@ var parseIcsIntoDatabase = function(fileContent) {
 		}
 		parsedEvents.push([uid, startDate, endDate, location, type, eventName, eventGroup, comment, speaker]);
 	}
-	var sqlcommand = 'INSERT INTO Events (UID, StartDate, EndDate, Location, Type, EventName, EventGroup, Comment, Speaker) ' +
+	let sqlcommand = 'INSERT INTO Events (UID, StartDate, EndDate, Location, Type, EventName, EventGroup, Comment, Speaker) ' +
 		'VALUES ? ON DUPLICATE KEY UPDATE StartDate=VALUES(StartDate), EndDate=VALUES(EndDate), Location=VALUES(Location), Type=VALUES(Type), EventName=VALUES(EventName), EventGroup=VALUES(EventGroup), Comment=VALUES(Comment), Speaker=VALUES(Speaker);';
-	mysqlpool.query(sqlcommand, [parsedEvents], function(error, rows) {
+	mysqlpool.query(sqlcommand, [parsedEvents], function(error) {
 		if (error) {
 			deferred.reject(error);
 		}
-		//console.log(rows);
+
 		deferred.resolve('database update successfull');
 	});
 	return deferred.promise;
-};
+}
 
-var logError = function(error) {
+function logError(error) {
 	console.log("error: " + error);
-};
-
-process.on('message', (message) => {
-	if (message.host !== undefined && message.user !== undefined) {
-		var promises = [];
-		mysqlpool = Mysql.createPool(message);
-		for (var major of dataSource.majors) {
-			for (var semester = 1; semester <= dataSource.semesters; semester++) {
-				for (var course of dataSource.courses) {
-					// Download ICS files: Pattern = {baseURL}+{major}+'/semester'+{integer}+'/kurs'+{courseLetter}
-					var downloadUrl = Urljoin(dataSource.icsMoodleUrlBase, major, dataSource.preSemesterString + semester, dataSource.preCourseString + course);
-					var promise = downloadFromUrl(downloadUrl).then(parseIcsIntoDatabase, logError);
-					promises.push(promise);
-				}
-			}
-		}
-		Q.all(promises).done(function() {
-			process.send('data_refreshed');
-			process.exit(0);
-		});
-	}
-});
+}

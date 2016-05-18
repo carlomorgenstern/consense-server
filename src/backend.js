@@ -1,6 +1,8 @@
 // Imports - every imported library starts with a capital letter
+'use strict';
+
 const Express = require('express')(); // import and create webserver
-Express.disable('x-powered-by');
+Express.disable('x-powered-by'); // disable software-identifiying HTTP header
 
 const Q = require('q'); // import promises functionality
 const Mysql = require('mysql'); // import mysql handler
@@ -9,9 +11,9 @@ const ChildProcess = require('child_process'); // import child process
 // constants
 const data = {
 	serverport: 8080,
-	pathToUpdaterModule: 'updater.js',
-	timeTillRefresh: 1000, //ms
-	mysql: {
+	pathToUpdaterModule: 'databaseUpdater.js',
+	manualRefreshTimeout: 1000, //ms
+	mysql: {  // database connection properties
 		host: 'omegainc.de',
 		user: 'consense',
 		password: 'Faustmann',
@@ -22,21 +24,21 @@ const data = {
 // connection pool for the mysql database
 var mysqlpool = Mysql.createPool(data.mysql);
 
-// function to updata the data from data source
-var updateData = (function() {
+// function to trigger a database update from the client
+var updateData = (() => {
 	// timestamp for the last data refresh
-	var lastRefreshTimestamp = Date.now();
+	let lastRefreshTimestamp = Date.now();
 	// reference to child process
-	var updaterProcess = null;
+	let updaterProcess = null;
 
 	// definition of function 'updateData'
-	return function(instantRefresh) {
+	return instantRefresh => {
 		if (updaterProcess !== null) {
 			return Q.reject('Refresh is already running');
-		} else if (instantRefresh && lastRefreshTimestamp + data.timeTillRefresh >= Date.now()) {
+		} else if (instantRefresh && lastRefreshTimestamp + data.manualRefreshTimeout >= Date.now()) {
 			return Q.reject('Refresh was already requested at ' + lastRefreshTimestamp);
 		} else {
-			var deferred = Q.defer();
+			let deferred = Q.defer();
 
 			updaterProcess = ChildProcess.fork(data.pathToUpdaterModule);
 			updaterProcess.send(data.mysql);
@@ -53,9 +55,9 @@ var updateData = (function() {
 }());
 
 // all functions that interact with the database
-var apiFunctions = (function() {
+var apiFunctions = (() => {
 	// cache object
-	var cache = {
+	let cache = {
 		rooms: null,
 		speakers: null
 	};
@@ -63,19 +65,19 @@ var apiFunctions = (function() {
 	// an object that holds all functions that interact with the database
 	// all functions return a promise which resolves with a JSON result or rejects with an error code
 	return {
-		getRoomChoices: function() {
+		getRoomChoices: () => {
 			if (cache.rooms !== null) {
 				return Q.resolve(cache.rooms);
 			} else {
-				var deferred = Q.defer();
-				mysqlpool.query('SELECT DISTINCT Location FROM Events', function(error, results) {
+				let deferred = Q.defer();
+				mysqlpool.query('SELECT DISTINCT Location FROM Events', (error, results) => {
 					if (error) {
 						deferred.reject(error);
 						return;
 					}
 
-					var locationArray = [];
-					for (var resultObject of results) {
+					let locationArray = [];
+					for (let resultObject of results) {
 						locationArray.push(resultObject.Location);
 					}
 					deferred.resolve(JSON.stringify(locationArray));
@@ -83,19 +85,19 @@ var apiFunctions = (function() {
 				return deferred.promise;
 			}
 		},
-		getSpeakerChoices: function() {
+		getSpeakerChoices: () => {
 			if (cache.speakers !== null) {
 				return Q.resolve(cache.speakers);
 			} else {
-				var deferred = Q.defer();
-				mysqlpool.query('SELECT DISTINCT Speaker FROM Events', function(error, results) {
+				let deferred = Q.defer();
+				mysqlpool.query('SELECT DISTINCT Speaker FROM Events', (error, results) => {
 					if (error) {
 						deferred.reject(error);
 						return;
 					}
 
-					var speakerArray = [];
-					for (var resultObject of results) {
+					let speakerArray = [];
+					for (let resultObject of results) {
 						speakerArray.push(resultObject.Speaker);
 					}
 					deferred.resolve(JSON.stringify(speakerArray));
@@ -103,9 +105,9 @@ var apiFunctions = (function() {
 				return deferred.promise;
 			}
 		},
-		getEventsForRoom: function(roomName) {
-			var deferred = Q.defer();
-			mysqlpool.query('SELECT * FROM Events WHERE Location = ?', [roomName], function(error, results) {
+		getEventsForRoom: roomName => {
+			let deferred = Q.defer();
+			mysqlpool.query('SELECT * FROM Events WHERE Location = ?', [roomName], (error, results) => {
 				if (error) {
 					deferred.reject(error);
 					return;
@@ -115,9 +117,9 @@ var apiFunctions = (function() {
 			});
 			return deferred.promise;
 		},
-		getEventsForSpeaker: function(speakerName) {
-			var deferred = Q.defer();
-			mysqlpool.query('SELECT * FROM Events WHERE Speaker = ?', [speakerName], function(error, results) {
+		getEventsForSpeaker: speakerName => {
+			let deferred = Q.defer();
+			mysqlpool.query('SELECT * FROM Events WHERE Speaker = ?', [speakerName], (error, results) => {
 				if (error) {
 					deferred.reject(error);
 					return;
@@ -127,19 +129,19 @@ var apiFunctions = (function() {
 			});
 			return deferred.promise;
 		},
-		rebuildCache: function() {
+		rebuildCache: () => {
 			cache.rooms = null;
 			cache.speakers = null;
 
-			apiFunctions.getRoomChoices().then(function(roomJSON) {
+			apiFunctions.getRoomChoices().then(roomJSON => {
 				cache.rooms = roomJSON;
-			}, function(error) {
+			}, error => {
 				console.log(error);
 			});
 
-			apiFunctions.getSpeakerChoices().then(function(speakerJSON) {
+			apiFunctions.getSpeakerChoices().then(speakerJSON => {
 				cache.speakers = speakerJSON;
-			}, function(error) {
+			}, error => {
 				console.log(error);
 			});
 		}
@@ -149,9 +151,9 @@ var apiFunctions = (function() {
 // API request for getting all possible rooms
 Express.get('/api/rooms', (request, response) => {
 	response.set("Access-Control-Allow-Origin", "*");
-	apiFunctions.getRoomChoices().then(function(roomJSON) {
+	apiFunctions.getRoomChoices().then(roomJSON => {
 		response.json(roomJSON);
-	}, function(error) {
+	}, error => {
 		console.log(error);
 		response.status(500).end();
 	});
@@ -159,9 +161,9 @@ Express.get('/api/rooms', (request, response) => {
 
 Express.get('/api/room/:base64Room', (request, response) => {
 	response.set("Access-Control-Allow-Origin", "*");
-	apiFunctions.getEventsForRoom(new Buffer(request.params.base64Room.toString(), 'base64').toString('utf8')).then(function(roomJSON) {
+	apiFunctions.getEventsForRoom(new Buffer(request.params.base64Room.toString(), 'base64').toString('utf8')).then(roomJSON => {
 		response.json(roomJSON);
-	}, function(error) {
+	}, error => {
 		console.log(error);
 		response.status(500).end();
 	});
@@ -170,9 +172,9 @@ Express.get('/api/room/:base64Room', (request, response) => {
 // API request for getting all possible speakers
 Express.get('/api/speakers', (request, response) => {
 	response.set("Access-Control-Allow-Origin", "*");
-	apiFunctions.getSpeakerChoices().then(function(speakerJSON) {
+	apiFunctions.getSpeakerChoices().then(speakerJSON => {
 		response.json(speakerJSON);
-	}, function(error) {
+	}, error => {
 		console.log(error);
 		response.status(500).end();
 	});
@@ -180,9 +182,9 @@ Express.get('/api/speakers', (request, response) => {
 
 Express.get('/api/speaker/:base64Speaker', (request, response) => {
 	response.set("Access-Control-Allow-Origin", "*");
-	apiFunctions.getEventsForSpeaker(new Buffer(request.params.base64Speaker, 'base64').toString('utf8')).then(function(speakerJSON) {
+	apiFunctions.getEventsForSpeaker(new Buffer(request.params.base64Speaker, 'base64').toString('utf8')).then(speakerJSON => {
 		response.json(speakerJSON);
-	}, function(error) {
+	}, error => {
 		console.log(error);
 		response.status(500).end();
 	});
@@ -191,10 +193,10 @@ Express.get('/api/speaker/:base64Speaker', (request, response) => {
 // API request for refreshing data from the data source manually, which is limited by data.timeTillRefresh
 Express.get('/api/refresh', (request, response) => {
 	response.set("Access-Control-Allow-Origin", "*");
-	updateData().then(function() {
+	updateData().then(() => {
 		apiFunctions.rebuildCache();
 		response.status(204).end();
-	}, function(error) {
+	}, error => {
 		response.status(423).json({
 			error: error
 		});
