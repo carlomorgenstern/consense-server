@@ -1,8 +1,8 @@
 {
   "name": "consense-server",
-  "version": "1.0.0",
-  "description": "Backend",
-  "main": "backend.js",
+  "version": "0.9.0",
+  "description": "Server application of the Consense project",
+  "main": "src/backend.js",
   "dependencies": {
     "express": "^4.13.4",
     "ical.js": "^1.1.2",
@@ -15,16 +15,19 @@
     "url-join": "0.0.1"
   },
   "devDependencies": {
-    "browser-sync": "^2.11.1",
     "gulp": "^3.9.1",
-    "gulp-develop-server": "^0.5.0"
+    "gulp-develop-server": "^0.5.0",
+    "gulp-util": "^3.0.7"
   },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/carlomorgenstern/consense-server.git"
   },
   "author": "Philipp Koch",
-  "license": "LGPL-3.0",
+  "contributors": [
+    "Carlo Morgenstern"
+  ],
+  "license": "MIT",
   "bugs": {
     "url": "https://github.com/carlomorgenstern/consense-server/issues"
   },

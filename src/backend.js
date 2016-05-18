@@ -4,16 +4,16 @@
 const Express = require('express')(); // import and create webserver
 Express.disable('x-powered-by'); // disable software-identifiying HTTP header
 
-const Q = require('q'); // import promises functionality
-const Mysql = require('mysql'); // import mysql handler
 const ChildProcess = require('child_process'); // import child process
+const Mysql = require('mysql'); // import mysql handler
+const Q = require('q'); // import promises functionality
 
 // constants
 const data = {
 	serverport: 8080,
 	pathToUpdaterModule: 'databaseUpdater.js',
 	manualRefreshTimeout: 1000, //ms
-	mysql: {  // database connection properties
+	mysql: { // database connection properties
 		host: 'omegainc.de',
 		user: 'consense',
 		password: 'Faustmann',
@@ -52,7 +52,7 @@ var updateData = (() => {
 			return deferred.promise;
 		}
 	};
-}());
+})();
 
 // all functions that interact with the database
 var apiFunctions = (() => {
@@ -146,7 +146,7 @@ var apiFunctions = (() => {
 			});
 		}
 	};
-}());
+})();
 
 // API request for getting all possible rooms
 Express.get('/api/rooms', (request, response) => {
@@ -205,7 +205,8 @@ Express.get('/api/refresh', (request, response) => {
 
 //  Start the server
 Express.listen(data.serverport, () => {
-	console.log('Server erzeugt. Erreichbar unter http://localhost:%d', data.serverport);
+	console.log('Server erzeugt. Erreichbar unter http://localhost:', data.serverport);
+	console.log('Server gestartet im Modus:', process.env.NODE_ENV);
 });
 
 // Refresh data when starting the server

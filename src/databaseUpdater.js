@@ -3,12 +3,12 @@
 'use strict';
 
 // Imports
-const Urljoin = require('url-join'); // import sane url joiner
+const Ical = require('ical.js'); // import ical parser
+const Mysql = require('mysql'); // import mysql handler
 const Q = require('q'); // import promises functionality
 const Qhttp = require('q-io/http'); // import http with promises
 const StripBom = require('strip-bom'); // import bom-stripper needed for ical.js
-const Ical = require('ical.js'); // import ical parser
-const Mysql = require('mysql'); // import mysql handler
+const Urljoin = require('url-join'); // import sane url joiner
 
 // constants for defining the data source
 const dataSource = {

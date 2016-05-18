@@ -1,34 +1,27 @@
+'use strict';
+
 var gulp = require('gulp');
-var server = require('gulp-develop-server');
-var browserSync = require('browser-sync');
+var gulpServer = require('gulp-develop-server');
+var gutil = require('gulp-util');
 
 var serverFiles = [
-	'./backend.js',
-	'./updater.js'
+	'src/backend.js',
+	'src/databaseUpdater.js'
 ];
 
 var options = {
-	server: {
-		path: './backend.js',
-		execArgv: ['--harmony']
-	},
-	bs: {
-		proxy: 'http://localhost:8080'
-	}
+	path: serverFiles[0]
 };
 
-gulp.task('server:restart', function() {
-	server.restart(function(error) {
-		if (!error) browserSync.reload();
-	});
-});
-
 gulp.task('serve', function() {
-	server.listen(options.server, function(error) {
-		if (!error) browserSync(options.bs);
-	});
+	if (gutil.env.type === 'prod') {
+		options.env = {
+			NODE_ENV: 'production'
+		};
+	}
 
-	gulp.watch(serverFiles, ['server:restart']);
+	gulpServer.listen(options);
+	gulp.watch(serverFiles, [gulpServer.restart]);
 });
 
 gulp.task('default', ['serve']);
