@@ -21,11 +21,11 @@ From Git:
     npm install
 
 ## Usage
-### For production:
+### For production use:
 
     TODO
 
-### For development and testing: 
+### For development use: 
 Starting in development mode (NODE_ENV is not touched):
 
     gulp serve
