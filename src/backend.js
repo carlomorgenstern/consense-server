@@ -10,19 +10,14 @@ const Q = require('q'); // import promises functionality
 
 // constants
 const data = {
-	serverport: 8080,
-	pathToUpdaterModule: 'databaseUpdater.js',
-	manualRefreshTimeout: 1000, //ms
-	mysql: { // database connection properties
-		host: 'omegainc.de',
-		user: 'consense',
-		password: 'Faustmann',
-		database: 'consense'
-	}
+	pathToUpdaterModule: 'databaseUpdater.js'
 };
 
+// configuration object
+var config = require('./config.js');
+
 // connection pool for the mysql database
-var mysqlpool = Mysql.createPool(data.mysql);
+var mysqlpool = Mysql.createPool(config.mysqlProperties);
 
 // function to trigger a database update from the client
 var updateData = (() => {
@@ -32,16 +27,15 @@ var updateData = (() => {
 	let updaterProcess = null;
 
 	// definition of function 'updateData'
-	return instantRefresh => {
+	return () => {
 		if (updaterProcess !== null) {
 			return Q.reject('Refresh is already running');
-		} else if (instantRefresh && lastRefreshTimestamp + data.manualRefreshTimeout >= Date.now()) {
+		} else if (lastRefreshTimestamp + config.manualRefreshTimeout >= Date.now()) {
 			return Q.reject('Refresh was already requested at ' + lastRefreshTimestamp);
 		} else {
 			let deferred = Q.defer();
 
 			updaterProcess = ChildProcess.fork(data.pathToUpdaterModule);
-			updaterProcess.send(data.mysql);
 
 			updaterProcess.on('message', (message) => {
 				if (message === 'data_refreshed') {
@@ -57,15 +51,66 @@ var updateData = (() => {
 // all functions that interact with the database
 var apiFunctions = (() => {
 	// cache object
+	// TODO Cache for events with object that supports DeleteOldest and configurable size
 	let cache = {
+		courses: null,
+		speakers: null,
 		rooms: null,
-		speakers: null
+		events: null
 	};
 
 	// an object that holds all functions that interact with the database
 	// all functions return a promise which resolves with a JSON result or rejects with an error code
 	return {
-		getRoomChoices: () => {
+		getCourses: () => {
+			if (cache.courses !== null) {
+				return Q.resolve(cache.rooms);
+			} else {
+				let deferred = Q.defer();
+				mysqlpool.query('SELECT DISTINCT UID, Name FROM Courses', (error, results) => {
+					if (error) {
+						deferred.reject(error);
+						return;
+					}
+
+					let locationArray = [];
+					for (let resultObject of results) {
+						locationArray.push({
+							id: resultObject.UID,
+							name: resultObject.Name
+						});
+					}
+					// TODO JSON.stringify??
+					deferred.resolve(JSON.stringify(locationArray));
+				});
+				return deferred.promise;
+			}
+		},
+		getSpeakers: () => {
+			if (cache.speakers !== null) {
+				return Q.resolve(cache.speakers);
+			} else {
+				let deferred = Q.defer();
+				mysqlpool.query('SELECT DISTINCT UID, Name FROM Speakers', (error, results) => {
+					if (error) {
+						deferred.reject(error);
+						return;
+					}
+
+					let speakerArray = [];
+					for (let resultObject of results) {
+						speakerArray.push({
+							id: resultObject.UID,
+							name: resultObject.Name
+						});
+					}
+					// TODO JSON.stringify??
+					deferred.resolve(JSON.stringify(speakerArray));
+				});
+				return deferred.promise;
+			}
+		},
+		getRooms: () => {
 			if (cache.rooms !== null) {
 				return Q.resolve(cache.rooms);
 			} else {
@@ -80,67 +125,56 @@ var apiFunctions = (() => {
 					for (let resultObject of results) {
 						locationArray.push(resultObject.Location);
 					}
+					// TODO JSON.stringify??
 					deferred.resolve(JSON.stringify(locationArray));
 				});
 				return deferred.promise;
 			}
 		},
-		getSpeakerChoices: () => {
-			if (cache.speakers !== null) {
-				return Q.resolve(cache.speakers);
+		getEvents: (type, uid) => {
+			var queryString;
+			if (type === 'course') {
+				queryString = 'SELECT * FROM Events WHERE CourseUID = ?';
+			} else if (type === 'speaker') {
+				queryString = 'SELECT * FROM Events WHERE SpeakerUID = ?';
+			} else if (type === 'room')  {
+				queryString = 'SELECT * FROM Events WHERE RoomUID = ?';
 			} else {
-				let deferred = Q.defer();
-				mysqlpool.query('SELECT DISTINCT Speaker FROM Events', (error, results) => {
-					if (error) {
-						deferred.reject(error);
-						return;
-					}
-
-					let speakerArray = [];
-					for (let resultObject of results) {
-						speakerArray.push(resultObject.Speaker);
-					}
-					deferred.resolve(JSON.stringify(speakerArray));
-				});
-				return deferred.promise;
+				return Q.reject('Invalid input type');
 			}
-		},
-		getEventsForRoom: roomName => {
+
 			let deferred = Q.defer();
-			mysqlpool.query('SELECT * FROM Events WHERE Location = ?', [roomName], (error, results) => {
+			mysqlpool.query(queryString, [uid], (error, results) => {
 				if (error) {
 					deferred.reject(error);
 					return;
 				}
 
-				deferred.resolve(JSON.stringify(results));
-			});
-			return deferred.promise;
-		},
-		getEventsForSpeaker: speakerName => {
-			let deferred = Q.defer();
-			mysqlpool.query('SELECT * FROM Events WHERE Speaker = ?', [speakerName], (error, results) => {
-				if (error) {
-					deferred.reject(error);
-					return;
-				}
-
+				// TODO JSON.stringify??
 				deferred.resolve(JSON.stringify(results));
 			});
 			return deferred.promise;
 		},
 		rebuildCache: () => {
-			cache.rooms = null;
+			cache.courses = null;
 			cache.speakers = null;
+			cache.rooms = null;
+			cache.events = null;
 
-			apiFunctions.getRoomChoices().then(roomJSON => {
-				cache.rooms = roomJSON;
+			apiFunctions.getCourses().then(courseJSON => {
+				cache.rooms = courseJSON;
 			}, error => {
 				console.log(error);
 			});
 
-			apiFunctions.getSpeakerChoices().then(speakerJSON => {
+			apiFunctions.getSpeakers().then(speakerJSON => {
 				cache.speakers = speakerJSON;
+			}, error => {
+				console.log(error);
+			});
+
+			apiFunctions.getRooms().then(roomJSON => {
+				cache.rooms = roomJSON;
 			}, error => {
 				console.log(error);
 			});
@@ -148,10 +182,20 @@ var apiFunctions = (() => {
 	};
 })();
 
-// API request for getting all possible rooms
-Express.get('/api/rooms', (request, response) => {
+// API requests
+Express.get(config.apiEndpoint+'/courses', (request, response) => {
 	response.set("Access-Control-Allow-Origin", "*");
-	apiFunctions.getRoomChoices().then(roomJSON => {
+	apiFunctions.getCourses().then(courseJSON => {
+		response.json(courseJSON);
+	}, error => {
+		console.log(error);
+		response.status(500).end();
+	});
+});
+
+Express.get(config.apiEndpoint+'/rooms', (request, response) => {
+	response.set("Access-Control-Allow-Origin", "*");
+	apiFunctions.getRooms().then(roomJSON => {
 		response.json(roomJSON);
 	}, error => {
 		console.log(error);
@@ -159,18 +203,7 @@ Express.get('/api/rooms', (request, response) => {
 	});
 });
 
-Express.get('/api/room/:base64Room', (request, response) => {
-	response.set("Access-Control-Allow-Origin", "*");
-	apiFunctions.getEventsForRoom(new Buffer(request.params.base64Room.toString(), 'base64').toString('utf8')).then(roomJSON => {
-		response.json(roomJSON);
-	}, error => {
-		console.log(error);
-		response.status(500).end();
-	});
-});
-
-// API request for getting all possible speakers
-Express.get('/api/speakers', (request, response) => {
+Express.get(config.apiEndpoint+'/speakers', (request, response) => {
 	response.set("Access-Control-Allow-Origin", "*");
 	apiFunctions.getSpeakerChoices().then(speakerJSON => {
 		response.json(speakerJSON);
@@ -180,23 +213,25 @@ Express.get('/api/speakers', (request, response) => {
 	});
 });
 
-Express.get('/api/speaker/:base64Speaker', (request, response) => {
+Express.get(config.apiEndpoint+'events', (request, response) => {
+	// TODO Handle query parameters
 	response.set("Access-Control-Allow-Origin", "*");
-	apiFunctions.getEventsForSpeaker(new Buffer(request.params.base64Speaker, 'base64').toString('utf8')).then(speakerJSON => {
-		response.json(speakerJSON);
+	apiFunctions.getEvents('type', 'uid').then(responseJSON => {
+		response.json(responseJSON);
 	}, error => {
 		console.log(error);
 		response.status(500).end();
 	});
 });
 
-// API request for refreshing data from the data source manually, which is limited by data.timeTillRefresh
+// API request for refreshing data from the data source manually, which is limited by config.manualRefreshTimout
 Express.get('/api/refresh', (request, response) => {
 	response.set("Access-Control-Allow-Origin", "*");
 	updateData().then(() => {
 		apiFunctions.rebuildCache();
 		response.status(204).end();
 	}, error => {
+		console.log(error);
 		response.status(423).json({
 			error: error
 		});
@@ -204,10 +239,12 @@ Express.get('/api/refresh', (request, response) => {
 });
 
 //  Start the server
-Express.listen(data.serverport, () => {
-	console.log('Server erzeugt. Erreichbar unter http://localhost:', data.serverport);
+Express.listen(config.serverport, () => {
 	console.log('Server gestartet im Modus:', process.env.NODE_ENV);
 });
 
-// Refresh data when starting the server
-// updateData().then(apiFunctions.rebuildCache);
+// TODO Logging with winston or pm2?
+// TODO Logging in with OpenIDConnect or Oauth2?
+// TODO Sessions persistieren und Tokenizen
+// TODO Mails Versenden
+// TODO Config mit node config?
