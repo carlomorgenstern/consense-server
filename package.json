@@ -2,13 +2,14 @@
   "name": "consense-server",
   "version": "0.9.0",
   "description": "Server application of the Consense project",
-  "main": "src/backend.js",
+  "main": "dist/backend.js",
   "dependencies": {
+    "config": "^1.20.4",
     "express": "^4.13.4",
     "ical.js": "^1.1.2",
     "mysql": "^2.10.2",
+    "node-schedule": "^1.1.0",
     "nodemailer": "^2.2.1",
-    "oauth-1.0a": "^1.0.1",
     "q": "^1.4.1",
     "q-io": "^1.13.2",
     "strip-bom": "^2.0.0",
@@ -31,5 +32,9 @@
   "bugs": {
     "url": "https://github.com/carlomorgenstern/consense-server/issues"
   },
-  "homepage": "https://github.com/carlomorgenstern/consense-server#readme"
+  "homepage": "https://github.com/carlomorgenstern/consense-server#readme",
+  "scripts": {
+    "start": "NODE_ENV=production node dist/backend.js",
+    "start_windows": "SET NODE_ENV=production&& node dist/backend.js"
+  }
 }

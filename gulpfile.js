@@ -7,8 +7,8 @@ var gutil = require('gulp-util');
 
 // source files, first file is the app entry
 const serverFiles = [
-	'src/backend.js',
-	'src/databaseUpdater.js'
+	'dist/backend.js',
+	'dist/databaseUpdater.js'
 ];
 
 // gulp tasks
